@@ -64,24 +64,10 @@ def CenterGet(img, return_pts=False):
     :description: 获取图像中心坐标,暂时没有考虑透视
     """
     frame = preprocess_image(img)
-
-    # ✅ 调试1：二值图
-    # cv2.imshow("thresh", frame)
-
     # Canny边缘检测
     edges = cv2.Canny(frame, canny_low_threshold, canny_high_threshold)
-
-    # ✅ 调试2：边缘图
-    # cv2.imshow("edges", edges)
-
     # 轮廓检测
     contours, _ = cv2.findContours(edges, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
-    
-    # ✅ 调试3：轮廓图
-    # debug_img = img.copy()
-    # cv2.drawContours(debug_img, contours, -1, (0,255,0), 2)
-    # cv2.imshow("contours", debug_img)   
-
     # 初始化最佳轮廓变量
     best_contour = None
     best_score = -1

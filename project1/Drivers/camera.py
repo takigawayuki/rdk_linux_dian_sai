@@ -1,69 +1,64 @@
 import cv2 as cv
-import os
 
 
 class Camera:
     def __init__(self):
+        # 初始化摄像头对象
         self.cvcap = None
         self.is_opened = False
 
     def open(self, main_size=(640, 360)):
-        if self.is_opened:
-            return True
+        # 如果摄像头已经打开，则直接返回True
+        if self.is_opened: return True
 
         try:
-            # 👉 默认用 /dev/video0
+            # 创建OpenCV摄像头对象，使用默认摄像头(0)
             self.cvcap = cv.VideoCapture(0)
-
-            if not self.cvcap.isOpened():
-                print("Failed to open camera")
-                return False
-
-            # 🔥 关键：切 MJPG（提升性能）
-            self.cvcap.set(cv.CAP_PROP_FOURCC, cv.VideoWriter_fourcc(*'MJPG'))
-
-            # 分辨率（保持你原来的接口）
+            # 设置分辨率
             self.cvcap.set(cv.CAP_PROP_FRAME_WIDTH, main_size[0])
             self.cvcap.set(cv.CAP_PROP_FRAME_HEIGHT, main_size[1])
-
-            # ❌ 不要强行设 FPS（驱动会忽略）
-            # self.cvcap.set(cv.CAP_PROP_FPS, 90)
-
+            # 检查摄像头是否成功打开
+            if not self.cvcap.isOpened():
+                raise Exception("Failed to open camera")
+            # 设置摄像头已打开标志
             self.is_opened = True
-            print("Using USB camera (/dev/video0)")
             return True
 
         except Exception as e:
+            # 打印摄像头打开失败的错误信息
             print(f"Camera Open Failed: {str(e)}")
+            # 设置摄像头未打开标志
             self.is_opened = False
             return False
 
     def capture(self, resize=None):
-        if not self.is_opened:
-            return None
+        # 如果摄像头未打开，则返回None
+        if not self.is_opened: return None
 
         try:
+            # 捕获图像
             ret, frame = self.cvcap.read()
-            if not ret:
+            # 检查是否成功捕获图像
+            if not ret or frame is None:
                 return None
-
-            # 保留你原来的逻辑
+            # 添加图像旋转180度的代码
             frame = cv.rotate(frame, cv.ROTATE_180)
-
+            # 调整大小（如BlackSearch中使用的640x480）
             if resize and isinstance(resize, tuple) and len(resize) == 2:
                 frame = cv.resize(frame, resize)
-
+            # 返回捕获到的图像
             return frame
-
+        # 捕获异常并打印错误信息
         except Exception as e:
             print(f"Image Capture Failed: {str(e)}")
+            # 返回None
             return None
 
     def close(self):
-        if self.is_opened:
-            if self.cvcap:
-                self.cvcap.release()
+        if self.is_opened and self.cvcap is not None:
+            self.cvcap.release()
             self.is_opened = False
 
     def __del__(self):
+        # 确保对象销毁时释放资源
         self.close()
