@@ -1,0 +1,7 @@
+{
+  "threshold": 132,
+  "canny_low": 50,
+  "canny_high": 150,
+  "min_area": 500,
+  "blur_kernel": 5
+}
