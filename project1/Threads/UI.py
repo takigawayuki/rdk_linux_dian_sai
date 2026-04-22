@@ -148,9 +148,14 @@ class GimbalApp:
         self.root.attributes("-fullscreen", True)
 
         self._running = False
-        self._worker_thread = None
-        self._log_queue = queue.Queue()
-        self._frame_queue = queue.Queue(maxsize=2)
+        self._threads = []
+
+        # 线程间队列
+        self._raw_queue    = queue.Queue(maxsize=2)   # 采集 → 算法
+        self._result_queue = queue.Queue(maxsize=2)   # 算法 → 串口/UI
+
+        self._log_queue   = queue.Queue()
+        self._frame_queue = queue.Queue(maxsize=2)    # 算法 → UI画面
 
         # 加载滑块参数
         p = SLIDER_DEFAULTS.copy()
@@ -320,8 +325,6 @@ class GimbalApp:
         slider.grid(row=row, column=1, padx=(0, 10), pady=2, sticky=tk.EW)
         parent.columnconfigure(1, weight=1)
 
-    # ── 控制逻辑 ──────────────────────────────────────
-
     def _toggle(self):
         if self._running:
             self._stop()
@@ -332,8 +335,19 @@ class GimbalApp:
         self._running = True
         self._set_status(running=True)
         self._log("系统启动中…", "info")
-        self._worker_thread = threading.Thread(target=self._worker, daemon=True)
-        self._worker_thread.start()
+
+        # 清空队列残留
+        for q in (self._raw_queue, self._result_queue, self._frame_queue):
+            while not q.empty():
+                try: q.get_nowait()
+                except: pass
+
+        t1 = threading.Thread(target=self._thread_capture, daemon=True, name="T-采集")
+        t2 = threading.Thread(target=self._thread_algo,    daemon=True, name="T-算法")
+        t3 = threading.Thread(target=self._thread_serial,  daemon=True, name="T-串口")
+        self._threads = [t1, t2, t3]
+        for t in self._threads:
+            t.start()
 
     def _stop(self):
         self._running = False
@@ -342,7 +356,7 @@ class GimbalApp:
 
     def _on_exit(self):
         self._running = False
-        time.sleep(0.15)
+        time.sleep(0.2)
         self.root.destroy()
 
     def _save_params(self):
@@ -362,9 +376,9 @@ class GimbalApp:
         update_centerget_file(t, cl, ch, ma)
         self._log("参数已保存并写入 CenterGet.py", "ok")
 
-    # ── 后台工作线程 ──────────────────────────────────
+    # ── 线程1：摄像头采集 ─────────────────────────────
 
-    def _worker(self):
+    def _thread_capture(self):
         cap = Camera()
         if not cap.open():
             self._log("摄像头打开失败", "err")
@@ -373,16 +387,6 @@ class GimbalApp:
             return
         self._log("摄像头已打开", "ok")
 
-        ser = MySerial(port=SERIAL_PORT, baudrate=BAUDRATE)
-        if not ser.open():
-            self._log(f"串口 {SERIAL_PORT} 打开失败", "err")
-            cap.close()
-            self._running = False
-            self.root.after(0, lambda: self._set_status(running=False))
-            return
-        self._log(f"串口 {SERIAL_PORT} 已打开", "ok")
-
-        last_send = time.time()
         fps = 0.0
         frame_count = 0
         fps_ts = time.time()
@@ -401,9 +405,25 @@ class GimbalApp:
                 fps = frame_count / elapsed
                 frame_count = 0
                 fps_ts = now
+                self._log(f"FPS: {fps:.1f}", "info")
                 self.root.after(0, lambda f=fps: self._fps_label.config(text=f"{f:.1f}"))
 
-            # 读取滑块参数
+            if not self._raw_queue.full():
+                self._raw_queue.put_nowait((frame, fps))
+
+        cap.close()
+        self._log("采集线程已停止", "info")
+
+    # ── 线程2：算法处理 ───────────────────────────────
+
+    def _thread_algo(self):
+        self._log("算法线程启动", "info")
+        while self._running:
+            try:
+                frame, fps = self._raw_queue.get(timeout=0.1)
+            except queue.Empty:
+                continue
+
             t  = self._sv_thresh.get()
             cl = self._sv_clow.get()
             ch = self._sv_chigh.get()
@@ -413,7 +433,6 @@ class GimbalApp:
 
             thresh_img, edges_img, result_img, center = process(frame, t, cl, ch, ma, bk)
 
-            # 原始画面标注
             orig = frame.copy()
             if center is not None:
                 cv2.circle(orig, center, 5, (0, 0, 255), -1)
@@ -421,28 +440,52 @@ class GimbalApp:
             cv2.putText(orig, f"FPS:{fps:.1f}", (8, 28),
                         cv2.FONT_HERSHEY_SIMPLEX, 0.8, (0, 255, 0), 2)
 
-            # 发送控制
-            if now - last_send >= SEND_INTERVAL:
-                if center is not None:
-                    dx = -(BASE_POINT[0] - center[0]) * 0.001
-                    dy = +(BASE_POINT[1] - center[1]) * 0.001
-                    ok = ser.send_deta(dx, dy)
-                    self._log(f"发送: dx={dx:.4f}, dy={dy:.4f}", "ok" if ok else "err")
-                    self.root.after(0, lambda d=f"({dx:.4f},{dy:.4f})": self._deta_label.config(text=d))
-                    self.root.after(0, lambda: self._target_label.config(text="已检测到", fg="#a6e3a1"))
-                else:
-                    ser.send_data("DETA:0.0000,0.0000\n")
-                    self._log("未检测到目标", "warn")
-                    self.root.after(0, lambda: self._target_label.config(text="未检测到", fg="#f9e2af"))
-                    self.root.after(0, lambda: self._deta_label.config(text="—"))
-                last_send = now
-
+            if not self._result_queue.full():
+                self._result_queue.put_nowait(center)
             if not self._frame_queue.full():
                 self._frame_queue.put_nowait((orig, thresh_img, edges_img, result_img))
 
-        cap.close()
+        self._log("算法线程已停止", "info")
+
+    # ── 线程3：串口发送 ───────────────────────────────
+
+    def _thread_serial(self):
+        ser = MySerial(port=SERIAL_PORT, baudrate=BAUDRATE)
+        if not ser.open():
+            self._log(f"串口 {SERIAL_PORT} 打开失败", "err")
+            self._running = False
+            self.root.after(0, lambda: self._set_status(running=False))
+            return
+        self._log(f"串口 {SERIAL_PORT} 已打开", "ok")
+
+        last_send = time.time()
+
+        while self._running:
+            try:
+                center = self._result_queue.get(timeout=0.1)
+            except queue.Empty:
+                continue
+
+            now = time.time()
+            if now - last_send < SEND_INTERVAL:
+                continue
+            last_send = now
+
+            if center is not None:
+                dx = -(BASE_POINT[0] - center[0]) * 0.001
+                dy = +(BASE_POINT[1] - center[1]) * 0.001
+                ok = ser.send_deta(dx, dy)
+                self._log(f"发送: dx={dx:.4f}, dy={dy:.4f}", "ok" if ok else "err")
+                self.root.after(0, lambda d=f"({dx:.4f},{dy:.4f})": self._deta_label.config(text=d))
+                self.root.after(0, lambda: self._target_label.config(text="已检测到", fg="#a6e3a1"))
+            else:
+                ser.send_data("DETA:0.0000,0.0000\n")
+                self._log("未检测到目标", "warn")
+                self.root.after(0, lambda: self._target_label.config(text="未检测到", fg="#f9e2af"))
+                self.root.after(0, lambda: self._deta_label.config(text="—"))
+
         ser.close()
-        self._log("系统已停止", "info")
+        self._log("串口线程已停止", "info")
         self.root.after(0, lambda: self._show_no_signal())
         self.root.after(0, lambda: self._target_label.config(text="—", fg="#cdd6f4"))
         self.root.after(0, lambda: self._deta_label.config(text="—"))
@@ -464,7 +507,10 @@ class GimbalApp:
 
     def _log(self, msg: str, tag: str = "info"):
         ts = time.strftime("%H:%M:%S")
-        self._log_queue.put((f"[{ts}] {msg}\n", tag))
+        full_msg = f"[{ts}] {msg}"
+        self._log_queue.put((full_msg + "\n", tag))
+        # 同时打印到终端
+        print(full_msg)
 
     def _poll_log(self):
         try:
