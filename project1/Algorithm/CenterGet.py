@@ -4,7 +4,7 @@ import math
 
 
 # 二值化阈值调整
-threshold_value = 90
+threshold_value = 83
 # 添加Canny边缘检测的阈值参数
 canny_low_threshold = 50
 canny_high_threshold = 150
