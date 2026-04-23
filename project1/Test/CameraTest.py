@@ -13,6 +13,7 @@ def camera_test():
     cap.set(cv2.CAP_PROP_FRAME_WIDTH, 1920)
     cap.set(cv2.CAP_PROP_FRAME_HEIGHT, 1080)
     number = 0
+    prev_time = time.time()
     # 读取帧
     while True:
         ret, frame = cap.read()
@@ -20,6 +21,12 @@ def camera_test():
             break
         # 旋转图像180度
         frame = cv2.rotate(frame, cv2.ROTATE_180)
+        # 计算并显示帧率
+        curr_time = time.time()
+        fps = 1.0 / (curr_time - prev_time) if curr_time != prev_time else 0
+        prev_time = curr_time
+        cv2.putText(frame, f"FPS: {fps:.1f}", (10, 30),
+                    cv2.FONT_HERSHEY_SIMPLEX, 1, (0, 255, 0), 2)
         cv2.imshow("USB Camera", frame)
         print("Frame number:%d, time: %d", number, time.time())
         number += 1
@@ -41,6 +48,7 @@ def video_record_by_frame():
     fourcc = cv2.VideoWriter_fourcc(*'XVID')
     out = cv2.VideoWriter('output.avi', fourcc, 20.0, (640, 480))
 
+    prev_time = time.time()
     while True:
         # 读取一帧图像
         ret, frame = cap.read()
@@ -48,6 +56,12 @@ def video_record_by_frame():
             break
         # 旋转图像180度
         frame = cv2.rotate(frame, cv2.ROTATE_180)
+        # 计算并显示帧率
+        curr_time = time.time()
+        fps = 1.0 / (curr_time - prev_time) if curr_time != prev_time else 0
+        prev_time = curr_time
+        cv2.putText(frame, f"FPS: {fps:.1f}", (10, 30),
+                    cv2.FONT_HERSHEY_SIMPLEX, 1, (0, 255, 0), 2)
         # 显示图像
         cv2.imshow('frame', frame)
 
@@ -73,9 +87,10 @@ def picture_record_by_click():
     # 设置分辨率
     cap.set(cv2.CAP_PROP_FRAME_WIDTH, 640)
     cap.set(cv2.CAP_PROP_FRAME_HEIGHT, 480)
-    
+
     print("Press 's' to save a picture, 'q' to quit.")
 
+    prev_time = time.time()
     while True:
         # 读取一帧图像
         ret, frame = cap.read()
@@ -83,6 +98,12 @@ def picture_record_by_click():
             break
         # 旋转图像180度
         frame = cv2.rotate(frame, cv2.ROTATE_180)
+        # 计算并显示帧率
+        curr_time = time.time()
+        fps = 1.0 / (curr_time - prev_time) if curr_time != prev_time else 0
+        prev_time = curr_time
+        cv2.putText(frame, f"FPS: {fps:.1f}", (10, 30),
+                    cv2.FONT_HERSHEY_SIMPLEX, 1, (0, 255, 0), 2)
 
         # 显示图像
         cv2.imshow('frame', frame)

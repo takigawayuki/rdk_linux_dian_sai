@@ -1,5 +1,5 @@
 {
-  "threshold": 132,
+  "threshold": 90,
   "canny_low": 50,
   "canny_high": 150,
   "min_area": 500,
