@@ -8,7 +8,7 @@ class Camera:
         self.is_opened = False
 
     # def open(self, main_size=(640, 360)):
-    def open(self, main_size=(640, 360), fps=120):
+    def open(self, main_size=(640, 480), fps=120):
         # 如果摄像头已经打开，则直接返回True
         if self.is_opened: return True
 
