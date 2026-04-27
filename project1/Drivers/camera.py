@@ -16,7 +16,7 @@ class Camera:
             # 创建OpenCV摄像头对象，使用默认摄像头(0)
             # self.cvcap = cv.VideoCapture(0)
 
-            self.cvcap = cv.VideoCapture(0, cv.CAP_V4L2)            
+            self.cvcap = cv.VideoCapture(0, cv.CAP_V4L2)
 
             self.cvcap.set(cv.CAP_PROP_FOURCC, cv.VideoWriter_fourcc(*'MJPG'))
             
