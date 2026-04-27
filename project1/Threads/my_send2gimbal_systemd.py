@@ -13,11 +13,11 @@ from Drivers.camera import Camera
 from Drivers.my_serial import MySerial
 from Algorithm.CenterGet import CenterGet
 
-BASE_POINT = (320, 180)
+BASE_POINT = (320, 240)    # 摄像头分辨率是 640x480，中心点坐标为 (320, 240)
 
 SERIAL_PORT = "/dev/ttyS1"
 BAUDRATE = 115200
-SEND_INTERVAL = 0.05
+SEND_INTERVAL = 0.01       # 100Hz
 
 ENABLE_DISPLAY = False
 

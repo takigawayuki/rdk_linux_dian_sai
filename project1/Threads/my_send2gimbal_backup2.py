@@ -16,7 +16,7 @@ BASE_POINT = (320, 240)    # 摄像头分辨率是 640x480
 
 SERIAL_PORT = "/dev/ttyS1"
 BAUDRATE = 115200
-SEND_INTERVAL = 0.01       # 100Hz
+SEND_INTERVAL = 0.05
 
 frame_queue  = queue.Queue(maxsize=2)   # 采集 → 算法
 frame_queue2 = queue.Queue(maxsize=2)   # 采集 → 显示（独立通道，不等算法）
@@ -126,13 +126,6 @@ def main():
 
     display_count = 0
     display_start = time.time()
-
-    def on_mouse(event, x, y, flags, param):
-        if event == cv2.EVENT_LBUTTONDOWN:
-            print(f"点击坐标: ({x}, {y})")
-
-    cv2.namedWindow("frame")
-    cv2.setMouseCallback("frame", on_mouse)
 
     try:
         while True:
