@@ -101,12 +101,12 @@ def thread_serial():
             continue
 
         if center is not None:
-            dx = -(BASE_POINT[0] - center[0]) * 0.001
-            dy = +(BASE_POINT[1] - center[1]) * 0.001
+            dx = -(BASE_POINT[0] - center[0])
+            dy = +(BASE_POINT[1] - center[1])
             serial.send_deta(dx, dy)
-            print(f"发送: dx={dx:.4f}, dy={dy:.4f}")
+            print(f"发送: dx={dx:.2f}, dy={dy:.2f}")
         else:
-            serial.send_data("DETA:0.0000,0.0000\n")
+            serial.send_deta(0.0, 0.0)
 
         last_send_time = now
 
