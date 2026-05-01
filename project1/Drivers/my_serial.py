@@ -1,5 +1,6 @@
 import serial
 import time
+import struct
 
 class MySerial:
     def __init__(self, port, baudrate=115200, timeout=1):
@@ -53,14 +54,39 @@ class MySerial:
     
     def send_deta(self, deta_x, deta_y):
         """
-        发送偏差值
-        :param deta_x: x方向偏差值
-        :param deta_y: y方向偏差值
+        发送偏差值（二进制协议）
+        :param deta_x: x方向偏差值（像素）
+        :param deta_y: y方向偏差值（像素）
         :return: 成功返回True，失败返回False
+
+        协议格式（11字节）：
+        [0xAA][0x55][dx(float,4字节)][dy(float,4字节)][校验和(1字节)]
         """
-        # 格式化数据，例如: "DETA:1.2345,0.6789\n"
-        data_str = f"DETA:{deta_x:.4f},{deta_y:.4f}\n"
-        return self.send_data(data_str)
+        if not self.is_open or self.ser is None:
+            print("串口未打开")
+            return False
+
+        try:
+            # 构建数据包
+            header1 = 0xAA
+            header2 = 0x55
+
+            # 将 float 转换为小端序字节
+            dx_bytes = struct.pack('<f', deta_x)
+            dy_bytes = struct.pack('<f', deta_y)
+
+            # 计算校验和（字节2-9的累加和，取低8位）
+            checksum = sum(dx_bytes + dy_bytes) & 0xFF
+
+            # 组装完整数据包
+            packet = bytes([header1, header2]) + dx_bytes + dy_bytes + bytes([checksum])
+
+            # 发送数据
+            self.ser.write(packet)
+            return True
+        except Exception as e:
+            print(f"发送数据失败: {str(e)}")
+            return False
     
     def close(self):
         """
