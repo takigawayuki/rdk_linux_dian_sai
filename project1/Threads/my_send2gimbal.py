@@ -1,3 +1,4 @@
+# -*- coding: utf-8 -*-
 import os
 import sys
 sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
@@ -28,11 +29,13 @@ center_lock   = threading.Lock()
 
 
 def thread_capture():
+    print("[DEBUG] 采集线程启动")
     cap = Camera()
     if not cap.open():
         print("Camera open failed")
         return
 
+    print("[DEBUG] 摄像头打开成功，开始采集")
     count = 0
     start = time.time()
     fps = 0.0
@@ -40,6 +43,7 @@ def thread_capture():
     while running:
         frame = cap.capture()
         if frame is None:
+            print("[DEBUG] cap.capture() 返回 None")
             continue
 
         count += 1
@@ -137,8 +141,9 @@ def main():
     try:
         while True:
             try:
-                frame, fps = frame_queue2.get(timeout=0.1)
+                frame, fps = frame_queue2.get_nowait()
             except queue.Empty:
+                cv2.waitKey(1)
                 continue
 
             display_count += 1
@@ -174,3 +179,8 @@ def main():
 
 if __name__ == '__main__':
     main()
+
+
+
+
+

@@ -16,7 +16,7 @@ class Camera:
             # 创建OpenCV摄像头对象，使用默认摄像头(0)
             # self.cvcap = cv.VideoCapture(0)
 
-            self.cvcap = cv.VideoCapture(0, cv.CAP_V4L2)
+            self.cvcap = cv.VideoCapture("/dev/v4l/by-id/usb-Sonix_Technology_Co.__Ltd._USB_2.0_Camera-video-index0", cv.CAP_V4L2)
 
             self.cvcap.set(cv.CAP_PROP_FOURCC, cv.VideoWriter_fourcc(*'MJPG'))
             
@@ -54,26 +54,18 @@ class Camera:
             return False
         
     def capture(self, resize=None):
-        # 如果摄像头未打开，则返回None
         if not self.is_opened: return None
 
         try:
-            # 捕获图像
             ret, frame = self.cvcap.read()
-            # 检查是否成功捕获图像
             if not ret or frame is None:
                 return None
-            # 添加图像旋转180度的代码
             frame = cv.rotate(frame, cv.ROTATE_180)
-            # 调整大小（如BlackSearch中使用的640x480）
             if resize and isinstance(resize, tuple) and len(resize) == 2:
                 frame = cv.resize(frame, resize)
-            # 返回捕获到的图像
             return frame
-        # 捕获异常并打印错误信息
         except Exception as e:
             print(f"Image Capture Failed: {str(e)}")
-            # 返回None
             return None
 
     def close(self):

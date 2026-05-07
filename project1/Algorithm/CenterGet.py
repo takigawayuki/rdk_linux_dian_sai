@@ -4,10 +4,10 @@ import math
 
 
 # 二值化阈值调整
-threshold_value = 56
+threshold_value = 85
 # 添加Canny边缘检测的阈值参数
-canny_low_threshold = 167
-canny_high_threshold = 38
+canny_low_threshold = 110
+canny_high_threshold = 44
 
 
 def preprocess_image(img):
@@ -57,10 +57,12 @@ def calculate_equidistant_center(pts):
     # 四舍五入到最近的像素
     return (int(round(x)), int(round(y)))
 
-def CenterGet(img, return_pts=False):
+def CenterGet(img, return_pts=False, return_area=False):
     """
     :param img: 输入图像
-    :return: 中心坐标
+    :param return_pts: 同时返回近似多边形角点
+    :param return_area: 同时返回检测到的轮廓面积（用于距离估算）
+    :return: 中心坐标，或 (center, approx)，或 (center, area)，或 (center, approx, area)
     :description: 获取图像中心坐标,暂时没有考虑透视
     """
     frame = preprocess_image(img)
@@ -73,12 +75,13 @@ def CenterGet(img, return_pts=False):
     best_score = -1
     best_center = None
     best_approx = None
+    best_area = 0
 
     # 处理每个轮廓以寻找类矩形
     for contour in contours:
         # 过滤面积过小的轮廓
         area = cv2.contourArea(contour)
-        if area < 1338:
+        if area < 1831:
             continue
 
         # 轮廓近似
@@ -144,6 +147,7 @@ def CenterGet(img, return_pts=False):
                         best_score = total_score
                         best_contour = contour
                         best_approx = approx
+                        best_area = area
 
                         # 计算中心点
                         M = cv2.moments(contour)
@@ -152,11 +156,14 @@ def CenterGet(img, return_pts=False):
                         else:
                             best_center = None
 
-    if best_contour is not None:
-        if best_center is not None:
-            if return_pts:
-                return best_center, best_approx
-            return best_center
+    if best_contour is not None and best_center is not None:
+        if return_pts and return_area:
+            return best_center, best_approx, best_area
+        if return_pts:
+            return best_center, best_approx
+        if return_area:
+            return best_center, best_area
+        return best_center
     else:
         return None
     

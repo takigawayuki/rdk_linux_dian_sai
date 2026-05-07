@@ -1,8 +1,7 @@
+# -*- coding: utf-8 -*-
 import os
 import sys
 sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
-
-os.environ["QT_QPA_PLATFORM"] = "offscreen"
 
 import cv2
 import time
@@ -13,13 +12,12 @@ from Drivers.camera import Camera
 from Drivers.my_serial import MySerial
 from Algorithm.CenterGet import CenterGet
 
-BASE_POINT = (320, 240)    # 摄像头分辨率是 640x480，中心点坐标为 (320, 240)
+# BASE_POINT = (320, 180)  # 摄像头分辨率是 640x360
+BASE_POINT = (320, 240)    # 摄像头分辨率是 640x480
 
 SERIAL_PORT = "/dev/ttyS1"
 BAUDRATE = 115200
 SEND_INTERVAL = 0.01       # 100Hz
-
-ENABLE_DISPLAY = False
 
 frame_queue  = queue.Queue(maxsize=2)   # 采集 → 算法
 frame_queue2 = queue.Queue(maxsize=2)   # 采集 → 显示（独立通道，不等算法）
@@ -29,12 +27,15 @@ running = True
 latest_center = None          # 算法结果，显示线程异步读取
 center_lock   = threading.Lock()
 
+
 def thread_capture():
+    print("[DEBUG] 采集线程启动")
     cap = Camera()
     if not cap.open():
         print("Camera open failed")
         return
 
+    print("[DEBUG] 摄像头打开成功，开始采集")
     count = 0
     start = time.time()
     fps = 0.0
@@ -42,6 +43,7 @@ def thread_capture():
     while running:
         frame = cap.capture()
         if frame is None:
+            print("[DEBUG] cap.capture() 返回 None")
             continue
 
         count += 1
@@ -103,13 +105,12 @@ def thread_serial():
             continue
 
         if center is not None:
-            dx = -(BASE_POINT[0] - center[0]) * 0.001
-            dy = +(BASE_POINT[1] - center[1]) * 0.001
+            dx = -(BASE_POINT[0] - center[0])
+            dy = +(BASE_POINT[1] - center[1])
             serial.send_deta(dx, dy)
-            print(f"发送: dx={dx:.4f}, dy={dy:.4f}")
+            print(f"发送: dx={dx:.2f}, dy={dy:.2f}")
         else:
-            serial.send_data("DETA:0.0000,0.0000\n")
-            print("未检测到目标，发送默认值")
+            serial.send_deta(0.0, 0.0)
 
         last_send_time = now
 
@@ -127,48 +128,67 @@ def main():
     t2.start()
     t3.start()
 
-    display_count = 0
-    display_start = time.time()
+    if False:
+        display_count = 0
+        display_start = time.time()
 
-    try:
-        while True:
-            try:
-                frame, fps = frame_queue2.get(timeout=0.1)
-            except queue.Empty:
-                continue
+        def on_mouse(event, x, y, flags, param):
+            if event == cv2.EVENT_LBUTTONDOWN:
+                print(f"点击坐标: ({x}, {y})")
 
-            display_count += 1
-            now = time.time()
-            if now - display_start >= 1.0:
-                display_fps = display_count / (now - display_start)
-                print(f"[显示 FPS]: {display_fps:.2f}")
-                display_count = 0
-                display_start = now
+        cv2.namedWindow("frame")
+        cv2.setMouseCallback("frame", on_mouse)
 
-            with center_lock:
-                center = latest_center
+        try:
+            while True:
+                try:
+                    frame, fps = frame_queue2.get_nowait()
+                except queue.Empty:
+                    cv2.waitKey(1)
+                    continue
 
-            if center is not None:
-                cv2.circle(frame, center, 5, (0, 0, 255), -1)
+                display_count += 1
+                now = time.time()
+                if now - display_start >= 1.0:
+                    display_fps = display_count / (now - display_start)
+                    print(f"[显示 FPS]: {display_fps:.2f}")
+                    display_count = 0
+                    display_start = now
 
-            cv2.circle(frame, BASE_POINT, 3, (0, 255, 0), -1)
-            cv2.putText(frame, f"FPS:{fps:.2f}", (10, 30),
-                        cv2.FONT_HERSHEY_SIMPLEX, 1, (0, 255, 0), 2)
+                with center_lock:
+                    center = latest_center
 
-            if ENABLE_DISPLAY:
+                if center is not None:
+                    cv2.circle(frame, center, 5, (0, 0, 255), -1)
+
+                cv2.circle(frame, BASE_POINT, 3, (0, 255, 0), -1)
+                cv2.putText(frame, f"FPS:{fps:.2f}", (10, 30),
+                            cv2.FONT_HERSHEY_SIMPLEX, 1, (0, 255, 0), 2)
+
                 cv2.imshow("frame", frame)
 
                 if cv2.waitKey(1) & 0xFF == ord('q'):
                     break
 
-    except KeyboardInterrupt:
-        pass
+        except KeyboardInterrupt:
+            pass
+
+        cv2.destroyAllWindows()
+    else:
+        try:
+            while True:
+                time.sleep(1)
+        except KeyboardInterrupt:
+            pass
 
     running = False
     time.sleep(0.5)
-    if ENABLE_DISPLAY:
-        cv2.destroyAllWindows()
 
 
 if __name__ == '__main__':
     main()
+
+
+
+
+

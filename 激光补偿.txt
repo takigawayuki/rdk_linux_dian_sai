@@ -1,0 +1,596 @@
+# --- 距离测量模块参数 (Distance Measurement Module Parameters) ---
+REFERENCE_AREA_PIXELS = 8412       # 参考物体在基准距离下的像素面积
+                                   # 说明: 用于面积-距离换算的标定基准
+                                   # 标定方法: 将A4纸放在1500mm处，记录检测面积
+
+
+
+---
+是外框矩形的像素面积。
+代码里取的是 selected_rects[-1]，也就是面积最大的那个矩形：
+outer_rect_area = selected_rects[-1][2]   # 外框面积（面积最大的）
+靶板是双层嵌套矩形（外框 + 内框），程序会同时检测到两个矩形，取面积最大的那个作为外框来算距离。
+所以 REFERENCE_AREA_PIXELS = 8412 就是外层黑色矩形框在 1500mm 处的像素面积，不是内框，也不是整张 A4 纸的面积。
+
+
+
+                                   
+REFERENCE_DISTANCE_MM = 1500       # 参考标定距离 (毫米)
+                                   # 说明: 进行面积标定时的物理距离
+
+
+
+
+# =============================================================================
+# 激光点映射导航系统参数 (Laser Point Mapping Navigation System Parameters)
+# 功能: 基于目标距离信息，将激光点映射到预设的坐标系统中
+# 原理: 采用线性映射算法，将物理距离转换为屏幕坐标，实现激光导航
+# =============================================================================
+
+# --- 距离映射范围定义 (Distance Mapping Range Definition) ---
+MAX_DISTANCE_MM = 1500             # 最远有效测距距离 (毫米)
+                                   # 说明: 超过此距离时激光点坐标固定在最远位置
+                                   # 应用: 防止超距离时的坐标异常跳变
+                                   
+MIN_DISTANCE_MM = 500              # 最近有效测距距离 (毫米)  
+                                   # 说明: 小于此距离时激光点坐标固定在最近位置
+                                   # 应用: 避免过近距离导致的测量误差
+
+# --- 激光点坐标映射参数 (Laser Point Coordinate Mapping Parameters) ---
+LASER_X_FIXED = 322                # 激光点X坐标固定值 (像素)
+                                   # 说明: X坐标不随距离变化，对应图像中心偏右
+                                   # 设计原因: 激光器安装位置决定的固定偏移
+                                   
+LASER_Y_MAX_DISTANCE = 250         # 最远距离对应的Y坐标 (像素)
+                                   # 说明: 当目标距离≥1500mm时，激光点Y坐标为250
+                                   # 映射逻辑: 距离越远，激光点越靠下
+                                   
+LASER_Y_MIN_DISTANCE = 240         # 最近距离对应的Y坐标 (像素)
+                                   # 说明: 当目标距离≤500mm时，激光点Y坐标为240
+                                   # 映射逻辑: 距离越近，激光点越靠上
+                                   
+# 线性映射公式: Y = Y_MIN + (distance - MIN_DISTANCE) * (Y_MAX - Y_MIN) / (MAX_DISTANCE - MIN_DISTANCE)
+# 示例: 距离1000mm时，Y = 240 + (1000-500) * (250-240) / (1500-500) = 245
+
+
+
+==========================================================================================================
+def calculate_laser_position_by_distance(distance_mm):
+    """
+    基于目标距离映射激光点导航坐标 (Calculate Laser Navigation Coordinates by Distance)
+    
+    功能描述 (Function Description):
+        将物理距离测量值转换为激光点在导航坐标系中的位置，实现基于距离的激光导航。
+        该函数是激光追踪小车导航系统的核心算法之一，提供稳定可靠的激光点位置映射。
+        
+    映射原理 (Mapping Principle):
+        采用线性映射算法，将连续的物理距离映射到离散的像素坐标系统：
+        - X轴坐标固定：由激光器的物理安装位置决定，不随距离变化
+        - Y轴坐标线性变化：距离越远，Y坐标越大（激光点越靠近图像下方）
+        
+    线性映射公式 (Linear Mapping Formula):
+        Y = Y_min + (D_clamped - D_min) × (Y_max - Y_min) / (D_max - D_min)
+        其中：
+        - D_clamped: 限制在有效范围内的距离值
+        - Y_min/Y_max: 最近/最远距离对应的Y坐标
+        - D_min/D_max: 最近/最远有效距离阈值
+        
+    坐标系统说明 (Coordinate System):
+        - 原点位置：图像左上角 (0, 0)
+        - X轴方向：从左到右递增
+        - Y轴方向：从上到下递增
+        - 激光点X坐标固定在图像中心偏右位置
+        
+    Args:
+        distance_mm (float): 测量得到的目标距离 (毫米)
+                           取值范围：任意正数值
+                           有效范围：500-1500mm
+                           超出范围会被自动限制
+                           
+    Returns:
+        tuple: 激光点在图像坐标系中的位置 (x, y)
+               x (int): X坐标，固定值 322
+               y (int): Y坐标，根据距离线性映射，范围 240-250
+               
+    映射示例 (Mapping Examples):
+        >>> calculate_laser_position_by_distance(500)   # 最近距离
+        (322, 240)
+        >>> calculate_laser_position_by_distance(1000)  # 中等距离  
+        (322, 245)
+        >>> calculate_laser_position_by_distance(1500)  # 最远距离
+        (322, 250)
+        >>> calculate_laser_position_by_distance(2000)  # 超出范围，限制到最远
+        (322, 250)
+        
+    设计考虑 (Design Considerations):
+        1. 距离限制：防止异常距离值导致坐标越界
+        2. 线性映射：确保平滑的激光点移动轨迹
+        3. 整数坐标：避免亚像素坐标带来的显示问题
+        4. 固定X坐标：简化导航控制逻辑
+        
+    应用场景 (Use Cases):
+        - 激光追踪小车的实时导航
+        - 可视化调试中的激光点显示
+        - 导航误差计算的基准坐标
+    """
+    # 步骤1: 设置X坐标为固定值(基于激光器安装位置)
+    x = LASER_X_FIXED  # X = 322像素
+    
+    # 步骤2: 限制距离到有效范围内，防止越界
+    distance_clamped = max(MIN_DISTANCE_MM, min(MAX_DISTANCE_MM, distance_mm))
+    # 限制范围: 500mm ≤ distance ≤ 1500mm
+    
+    # 步骤3: 线性映射计算Y坐标 
+    # 公式: Y = Y_min + (D - D_min) × (Y_max - Y_min) / (D_max - D_min)
+    # 500mm→240像素, 1500mm→250像素, 线性插值
+    y = LASER_Y_MIN_DISTANCE + (distance_clamped - MIN_DISTANCE_MM) * \
+        (LASER_Y_MAX_DISTANCE - LASER_Y_MIN_DISTANCE) / (MAX_DISTANCE_MM - MIN_DISTANCE_MM)
+    
+    # 步骤4: 转换为整数坐标并返回
+    return (int(x), int(y))  # 返回(322, 240-250)范围内的坐标
+
+def draw_laser_position_info(image, laser_pt, distance_mm):
+    """在图像上绘制激光点位置信息"""
+    if laser_pt is not None:
+        # 绘制激光点
+        cv2.circle(image, laser_pt, 10, (0, 255, 255), 2)  # 黄色圆圈
+        cv2.circle(image, laser_pt, 4, (0, 0, 255), -1)   # 红色实心圆
+        
+        # 绘制十字线
+        cross_size = 20
+        cv2.line(image, (laser_pt[0] - cross_size, laser_pt[1]), 
+                 (laser_pt[0] + cross_size, laser_pt[1]), (0, 255, 255), 2)
+        cv2.line(image, (laser_pt[0], laser_pt[1] - cross_size), 
+                 (laser_pt[0], laser_pt[1] + cross_size), (0, 255, 255), 2)
+        
+        # 标注坐标和距离
+        label = f"Laser: ({laser_pt[0]}, {laser_pt[1]}) | {distance_mm:.1f}mm"
+        label_pos = (laser_pt[0] + 25, laser_pt[1] - 25)
+        cv2.putText(image, label, label_pos, cv2.FONT_HERSHEY_SIMPLEX, 0.6, (0, 255, 255), 2)
+        
+        # 在图像角落显示映射状态
+        cv2.putText(image, "LASER MAPPED", (10, 150), 
+                   cv2.FONT_HERSHEY_SIMPLEX, 0.7, (0, 255, 0), 2)
+        
+        return True
+    else:
+        # 显示未映射激光点
+        cv2.putText(image, "NO LASER MAPPING", (10, 150), 
+                   cv2.FONT_HERSHEY_SIMPLEX, 0.7, (0, 0, 255), 2)
+        return False
+
+def calculate_laser_error(laser_pt, target_center, pixels_per_mm=1.5):
+    """计算激光点相对于目标中心的误差"""
+    if laser_pt is None or target_center is None:
+        return None, None, None
+    
+    # 计算像素差值
+    dx_pixels = laser_pt[0] - target_center[0]
+    dy_pixels = laser_pt[1] - target_center[1]
+    
+    # 转换为毫米
+    dx_mm = dx_pixels / pixels_per_mm
+    dy_mm = dy_pixels / pixels_per_mm
+    
+    # 计算距离
+    distance_pixels = np.sqrt(dx_pixels**2 + dy_pixels**2)
+    distance_mm = distance_pixels / pixels_per_mm
+    
+    return dx_mm, dy_mm, distance_mm
+
+
+
+======================================================================================================
+    # ========== 主处理循环 ==========
+    while True:
+        frame_start = time.time()  # 记录帧处理开始时间
+
+        # --- 图像采集阶段 ---
+        frame_main = get_image()  # 从相机获取一帧图像
+        if frame_main is None:    # 获取失败时跳过本帧
+            continue
+            
+        # --- 图像预处理阶段 ---
+        frame_main = cv2.resize(frame_main, (640, 480))  # 统一图像尺寸
+        current_frame_for_hsv = frame_main.copy()        # 缓存HSV分析用图像
+
+        # --- 图像处理管道 ---
+        # 步骤1: 高斯模糊降噪
+        blurred = cv2.GaussianBlur(frame_main, (GAUSSIAN_BLUR_SIZE, GAUSSIAN_BLUR_SIZE), 0)
+        # 步骤2: 多模态预处理(二值化+边缘检测+形态学)
+        gray = cv2.cvtColor(blurred, cv2.COLOR_BGR2GRAY)
+        _, binary = cv2.threshold(gray, BINARY_THRESHOLD_CORRECTED, 255, cv2.THRESH_BINARY_INV)
+        
+        # 步骤3: 形态学闭运算修复激光干扰
+        kernel_closing = cv2.getStructuringElement(cv2.MORPH_RECT, (4, 4))
+        binary_closed = cv2.morphologyEx(binary, cv2.MORPH_CLOSE, kernel_closing)
+        
+        # 步骤4: 边缘检测和信息融合
+        edges = cv2.Canny(gray, CANNY_LOWER, CANNY_UPPER, apertureSize=3)
+        combined = cv2.bitwise_or(binary_closed, edges)  # 融合区域+边缘信息
+        
+        if combined is None:  # 处理失败时跳过
+            continue
+        
+        # --- 目标检测阶段 ---  
+        contours, hierarchy = cv2.findContours(combined, cv2.RETR_TREE, cv2.CHAIN_APPROX_SIMPLE)
+        selected_rects = find_rectangles(contours, hierarchy)  # 智能矩形检测
+        
+        # --- 初始化检测结果变量 ---
+        detection_status = "未检测到矩形"     # 检测状态文本
+        laser_pt = None                     # 激光点坐标 
+        laser_status = "激光点: 无距离数据"   # 激光状态文本
+        
+        # --- 目标检测成功分支 ---
+        if len(selected_rects) >= 1:
+            detection_status = f"检测到 {len(selected_rects)} 个矩形"
+            
+            # 选择外框矩形进行处理(面积最大的通常是外框)
+            outer_rect_corners = selected_rects[-1][1]  # 外框角点(已排序)
+            outer_rect_area = selected_rects[-1][2]     # 外框面积
+            
+            # 距离估算: 面积→距离转换
+            estimated_distance = estimate_distance_by_area(outer_rect_area)
+            
+            # 激光点映射: 距离→坐标转换  
+            laser_pt = calculate_laser_position_by_distance(estimated_distance)
+            laser_status = f"激光点: 映射 ({laser_pt[0]}, {laser_pt[1]}) | {estimated_distance:.1f}mm"
+            
+            # 打印距离估计信息到命令行
+            #print_calibration_info(outer_rect_area, estimated_distance)
+            
+            # 创建透视变换
+            M, M_inv, corrected_size = create_perspective_transform(
+                outer_rect_corners.reshape(4, 2), 
+                target_width_mm=297,
+                target_height_mm=210,
+                pixels_per_mm=1.5
+            )
+            
+            # 应用透视变换
+            corrected_image = cv2.warpPerspective(frame_main, M, corrected_size)
+            
+            # 在校正后的图像中寻找中心
+            center_in_corrected, inner_corners = find_center_in_corrected_image(
+                corrected_image, corrected_size
+            )
+            
+            # 将中心点变换回原图
+            final_center_point = transform_point_back(center_in_corrected, M_inv)
+            
+            # 在校正图像中绘制检测结果
+            if inner_corners is not None:
+                cv2.drawContours(corrected_image, [inner_corners.reshape(-1, 1, 2)], -1, (0, 255, 0), 2)
+            
+            # 标记中心点
+            cv2.circle(corrected_image, center_in_corrected, 8, (0, 0, 255), -1)
+            
+            # 绘制目标圆
+            target_radius_px = draw_target_circle(
+                corrected_image, center_in_corrected, 
+                radius_mm=60, pixels_per_mm=1.5
+            )
+            
+            # 处理激光点在校正图像中的显示 - 使用基于距离映射的坐标
+            if laser_pt is not None and M is not None:
+                # 将映射的激光点坐标转换到校正图像坐标系
+                laser_pt_corrected = transform_point_to_corrected(laser_pt, M)
+                
+                # 检查点是否在目标圆内
+                in_target_circle = check_point_in_circle(
+                    laser_pt_corrected, center_in_corrected, target_radius_px
+                )
+                
+                # 设置颜色
+                point_color = (0, 255, 0) if in_target_circle else (0, 0, 255)
+                
+                # 绘制激光点
+                cv2.circle(corrected_image, laser_pt_corrected, 8, point_color, 2)
+                cv2.circle(corrected_image, laser_pt_corrected, 3, (0, 255, 255), -1)
+                
+                # 计算误差
+                dx_mm, dy_mm, distance_mm = calculate_laser_error(
+                    laser_pt_corrected, center_in_corrected, pixels_per_mm=1.5
+                )
+                
+                if dx_mm is not None:
+                    # 通过串口发送误差数据
+                    if serial_enabled:
+                        send_error_data(dx_mm, dy_mm, estimated_distance, data_type="laser")
+                    
+                    # 显示误差信息
+                    info_y = 200
+                    cv2.putText(corrected_image, f'Laser: {laser_pt_corrected}', 
+                               (10, info_y), cv2.FONT_HERSHEY_SIMPLEX, 0.5, point_color, 1)
+                    cv2.putText(corrected_image, f'Laser X: {dx_mm:.1f}mm', 
+                               (10, info_y + 20), cv2.FONT_HERSHEY_SIMPLEX, 0.5, (0, 255, 255), 1)
+                    cv2.putText(corrected_image, f'Laser Y: {dy_mm:.1f}mm', 
+                               (10, info_y + 40), cv2.FONT_HERSHEY_SIMPLEX, 0.5, (0, 255, 255), 1)
+                    cv2.putText(corrected_image, f'Laser Dist: {distance_mm:.1f}mm', 
+                               (10, info_y + 60), cv2.FONT_HERSHEY_SIMPLEX, 0.5, (0, 255, 255), 1)
+                    
+                    # 显示点状态
+                    status_text = "✓ LASER IN TARGET" if in_target_circle else "✗ LASER OUTSIDE"
+                    status_color = (0, 255, 0) if in_target_circle else (0, 0, 255)
+                    cv2.putText(corrected_image, status_text, (10, info_y + 80),
+                               cv2.FONT_HERSHEY_SIMPLEX, 0.6, status_color, 2)
+                    
+                    # 显示当前使用的点类型
+                    mode_text = "Mode: DISTANCE MAPPED"
+                    mode_color = (0, 255, 0)
+                    cv2.putText(corrected_image, mode_text, (10, info_y + 100),
+                               cv2.FONT_HERSHEY_SIMPLEX, 0.5, mode_color, 2)
+                    
+                    # 绘制误差线
+                    cv2.line(corrected_image, center_in_corrected, 
+                            laser_pt_corrected, (0, 255, 255), 2)
+            
+            # 在校正图像上标注坐标系信息
+            cv2.putText(corrected_image, 'Corrected View', 
+                       (10, 25), cv2.FONT_HERSHEY_SIMPLEX, 0.7, (255, 255, 255), 2)
+            cv2.putText(corrected_image, f'Size: {corrected_size[0]}x{corrected_size[1]}', 
+                       (10, 50), cv2.FONT_HERSHEY_SIMPLEX, 0.5, (255, 255, 255), 1)
+            
+            # 显示中心点坐标
+            cv2.putText(corrected_image, f'Center: {center_in_corrected}', 
+                       (10, 75), cv2.FONT_HERSHEY_SIMPLEX, 0.6, (0, 0, 255), 2)
+            
+            detection_status = "透视校正成功"
+            
+        else:
+            final_center_point = (-1, -1)
+            corrected_image = None
+        
+        # 在原图中绘制检测结果
+        estimated_distance = -1  # 初始化距离变量
+        for i, rect_data in enumerate(selected_rects):
+            color = (0, 255, 0) if i == len(selected_rects)-1 else (255, 0, 0)
+            corners = rect_data[1].reshape(-1, 1, 2)
+            cv2.drawContours(frame_main, [corners], -1, color, 2)
+            
+            # 如果是最大的矩形（用于透视校正的矩形），显示距离信息
+            if i == len(selected_rects)-1:
+                rect_area = rect_data[2]
+                estimated_distance = estimate_distance_by_area(rect_area)
+            
+            # 标注矩形序号
+            rect_center = np.mean(corners.reshape(4, 2), axis=0).astype(int)
+            cv2.putText(frame_main, f'R{i+1}', tuple(rect_center), 
+                       cv2.FONT_HERSHEY_SIMPLEX, 0.6, color, 2)
+        
+        # 绘制最终中心点
+        if final_center_point != (-1, -1):
+            cv2.circle(frame_main, final_center_point, 8, (0, 0, 255), -1)
+            cv2.putText(frame_main, f'Center: {final_center_point}', 
+                       (10, 30), cv2.FONT_HERSHEY_SIMPLEX, 0.6, (0, 0, 255), 2)
+        
+        # 绘制点击点
+        if clicked_point is not None:
+            cv2.circle(frame_main, clicked_point, 6, (255, 0, 0), -1)
+            cv2.putText(frame_main, f'Click: {clicked_point}', 
+                       (10, 60), cv2.FONT_HERSHEY_SIMPLEX, 0.5, (255, 0, 0), 1)
+            
+            # 处理HSV信息输出请求
+            if hsv_output_requested:
+                print(f"正在获取坐标 {clicked_point} 的HSV信息...")
+                output_hsv_info(current_frame_for_hsv, clicked_point[0], clicked_point[1])
+                hsv_output_requested = False  # 重置标志
+        
+        # 绘制激光点（基于距离映射）
+        if laser_pt is not None:
+            draw_laser_position_info(frame_main, laser_pt, estimated_distance)
+        
+        # 性能信息
+        fps = get_fps()
+        frame_time = (time.time() - frame_start) * 1000
+        
+        # 显示系统信息
+        info_y_start = 90
+        cv2.putText(frame_main, f'FPS: {fps:.1f} | Frame: {frame_time:.1f}ms', 
+                   (10, info_y_start), cv2.FONT_HERSHEY_SIMPLEX, 0.5, (0, 255, 255), 1)
+        
+        # 串口状态显示
+        serial_status = f"Serial: {selected_port}@{selected_baudrate}" if serial_enabled else "Serial: OFF"
+        cv2.putText(frame_main, serial_status, 
+                   (10, info_y_start + 20), cv2.FONT_HERSHEY_SIMPLEX, 0.4, 
+                   (0, 255, 0) if serial_enabled else (0, 0, 255), 1)
+        
+        cv2.putText(frame_main, f'Status: {detection_status}', 
+                   (10, info_y_start + 40), cv2.FONT_HERSHEY_SIMPLEX, 0.5, (255, 255, 255), 1)
+        
+        # 显示距离估计信息
+        if estimated_distance > 0:
+            distance_text = f'Distance: {estimated_distance:.1f}mm ({estimated_distance/10:.1f}cm)'
+            cv2.putText(frame_main, distance_text, 
+                       (10, info_y_start + 60), cv2.FONT_HERSHEY_SIMPLEX, 0.5, (0, 255, 255), 1)
+            cv2.putText(frame_main, f'{laser_status}', 
+                       (10, info_y_start + 80), cv2.FONT_HERSHEY_SIMPLEX, 0.5, 
+                       (0, 255, 0), 1)
+            cv2.putText(frame_main, f'Res: {frame_main.shape[1]}x{frame_main.shape[0]}', 
+                       (10, info_y_start + 100), cv2.FONT_HERSHEY_SIMPLEX, 0.5, (255, 255, 255), 1)
+        else:
+            cv2.putText(frame_main, f'{laser_status}', 
+                       (10, info_y_start + 60), cv2.FONT_HERSHEY_SIMPLEX, 0.5, 
+                       (128, 128, 128), 1)
+            cv2.putText(frame_main, f'Res: {frame_main.shape[1]}x{frame_main.shape[0]}', 
+                       (10, info_y_start + 80), cv2.FONT_HERSHEY_SIMPLEX, 0.5, (255, 255, 255), 1)
+        
+        # 添加操作提示 - 动态调整位置
+        hint_y_base = frame_main.shape[0] - 70
+        cv2.putText(frame_main, 'Q:Quit S:Save R:Reset L:LaserInfo B:Binary E:Edges C:Combined D:Debug 1:PrintParams', 
+                   (10, hint_y_base), cv2.FONT_HERSHEY_SIMPLEX, 0.32, (255, 255, 255), 1)
+        cv2.putText(frame_main, '+/-:MainThresh [/]:CorrectedThresh', 
+                   (10, hint_y_base + 20), cv2.FONT_HERSHEY_SIMPLEX, 0.32, (128, 255, 255), 1)
+        cv2.putText(frame_main, f'Debug: Binary:{DEBUG_SHOW_BINARY} Edges:{DEBUG_SHOW_EDGES} Combined:{DEBUG_SHOW_COMBINED}', 
+                   (10, hint_y_base + 40), cv2.FONT_HERSHEY_SIMPLEX, 0.3, (128, 255, 128), 1)
+        cv2.putText(frame_main, f'Thresholds: Main:{BINARY_THRESHOLD} Corrected:{BINARY_THRESHOLD_CORRECTED}', 
+                   (10, hint_y_base + 60), cv2.FONT_HERSHEY_SIMPLEX, 0.3, (255, 128, 255), 1)
+        
+        # 显示窗口
+        cv2.imshow("Jetson Hik Camera Vision", frame_main)
+        
+        # 调试窗口显示 - 根据调试开关控制
+        if DEBUG_SHOW_BINARY:
+            safe_show_window("binary", binary)
+        else:
+            # 如果关闭了调试，确保关闭窗口
+            safe_destroy_window("binary")
+        
+        if DEBUG_SHOW_EDGES:
+            safe_show_window("edges", edges)
+        else:
+            safe_destroy_window("edges")
+                
+        if DEBUG_SHOW_COMBINED:
+            safe_show_window("combined", combined)
+        else:
+            safe_destroy_window("combined")
+        
+        # 显示校正图像
+        if corrected_image is not None:
+            display_height = min(400, corrected_image.shape[0])
+            if corrected_image.shape[0] > display_height:
+                display_width = int(display_height * corrected_image.shape[1] / corrected_image.shape[0])
+                display_corrected = cv2.resize(corrected_image, (display_width, display_height))
+            else:
+                display_corrected = corrected_image
+            cv2.imshow("Perspective Corrected", display_corrected)
+        
+        # 按键处理
+        key = cv2.waitKey(1) & 0xFF
+        if key == ord('q'):
+            print("用户退出")
+            break
+        elif key == ord('s') and frame_main is not None:
+            # 保存图像
+            timestamp = int(time.time())
+            save_dir = '/home/nvidia' if os.path.exists('/home/nvidia') else '/tmp'
+            
+            original_filename = f'{save_dir}/jetson_hik_original_{timestamp}.jpg'
+            cv2.imwrite(original_filename, frame_main)
+            print(f"✓ 保存原图: {original_filename}")
+            
+            if corrected_image is not None:
+                corrected_filename = f'{save_dir}/jetson_hik_corrected_{timestamp}.jpg'
+                cv2.imwrite(corrected_filename, corrected_image)
+                print(f"✓ 保存校正图: {corrected_filename}")
+                
+        elif key == ord('r'):
+            # 重置点击点
+            clicked_point = None
+            print("✓ 重置点击点")
+            
+        elif key == ord('l'):
+            # 激光点映射系统总是启用的，这里可以显示当前映射参数
+            print(f"✓ 激光映射参数: 距离范围 {MIN_DISTANCE_MM}-{MAX_DISTANCE_MM}mm")
+            print(f"  X坐标固定: {LASER_X_FIXED}")
+            print(f"  Y坐标范围: {LASER_Y_MIN_DISTANCE}-{LASER_Y_MAX_DISTANCE}")
+                
+        elif key == ord('b'):
+            # 切换二值化调试显示
+            DEBUG_SHOW_BINARY = not DEBUG_SHOW_BINARY
+            print(f"✓ 二值化显示: {'开启' if DEBUG_SHOW_BINARY else '关闭'}")
+            
+        elif key == ord('e'):
+            # 切换边缘检测调试显示
+            DEBUG_SHOW_EDGES = not DEBUG_SHOW_EDGES
+            print(f"✓ 边缘检测显示: {'开启' if DEBUG_SHOW_EDGES else '关闭'}")
+            
+        elif key == ord('c'):
+            # 切换合并结果调试显示
+            DEBUG_SHOW_COMBINED = not DEBUG_SHOW_COMBINED
+            print(f"✓ 合并结果显示: {'开启' if DEBUG_SHOW_COMBINED else '关闭'}")
+            
+        elif key == ord('d'):
+            # 切换所有调试显示
+            debug_all = not (DEBUG_SHOW_BINARY or DEBUG_SHOW_EDGES or DEBUG_SHOW_COMBINED)
+            DEBUG_SHOW_BINARY = debug_all
+            DEBUG_SHOW_EDGES = debug_all
+            DEBUG_SHOW_COMBINED = debug_all
+            print(f"✓ 所有调试显示: {'开启' if debug_all else '关闭'}")
+            
+        elif key == ord('+') or key == ord('='):
+            # 增加主二值化阈值
+            BINARY_THRESHOLD = min(255, BINARY_THRESHOLD + 5)
+            print(f"✓ 主二值化阈值: {BINARY_THRESHOLD}")
+            
+        elif key == ord('-'):
+            # 减少主二值化阈值
+            BINARY_THRESHOLD = max(0, BINARY_THRESHOLD - 5)
+            print(f"✓ 主二值化阈值: {BINARY_THRESHOLD}")
+            
+        elif key == ord('['):
+            # 减少校正图像二值化阈值
+            BINARY_THRESHOLD_CORRECTED = max(0, BINARY_THRESHOLD_CORRECTED - 5)
+            print(f"✓ 校正图像二值化阈值: {BINARY_THRESHOLD_CORRECTED}")
+            
+        elif key == ord(']'):
+            # 增加校正图像二值化阈值
+            BINARY_THRESHOLD_CORRECTED = min(255, BINARY_THRESHOLD_CORRECTED + 5)
+            print(f"✓ 校正图像二值化阈值: {BINARY_THRESHOLD_CORRECTED}")
+            
+        elif key == ord('1'):
+            # 打印当前所有阈值参数
+            print("\n=== 当前阈值参数 ===")
+            print(f"主二值化阈值: {BINARY_THRESHOLD}")
+            print(f"校正图像二值化阈值: {BINARY_THRESHOLD_CORRECTED}")
+            print(f"Canny下阈值: {CANNY_LOWER}")
+            print(f"Canny上阈值: {CANNY_UPPER}")
+            print(f"高斯模糊大小: {GAUSSIAN_BLUR_SIZE}")
+            print(f"最小轮廓面积: {MIN_CONTOUR_AREA}")
+            print(f"最大轮廓面积: {MAX_CONTOUR_AREA}")
+            print(f"角度容差: {ANGLE_TOLERANCE}")
+            print(f"边长比容差: {SIDE_RATIO_TOLERANCE}")
+            print(f"最小面积比: {MIN_AREA_RATIO} (嵌套矩形过滤)")
+            print("--- 距离估计参数 ---")
+            print(f"参考面积: {REFERENCE_AREA_PIXELS} 像素")
+            print(f"参考距离: {REFERENCE_DISTANCE_MM} mm")
+            print(f"实际物体面积: {REAL_OBJECT_AREA_MM2} mm²")
+            print("--- 激光点映射参数 ---")
+            print(f"距离范围: {MIN_DISTANCE_MM}-{MAX_DISTANCE_MM} mm")
+            print(f"X坐标固定: {LASER_X_FIXED}")
+            print(f"Y坐标范围: {LASER_Y_MIN_DISTANCE}-{LASER_Y_MAX_DISTANCE}")
+            print("=====================")
+            
+        elif key == ord('a'):
+            # 增加面积比阈值
+            MIN_AREA_RATIO = min(1.0, MIN_AREA_RATIO + 0.05)
+            print(f"✓ 最小面积比阈值: {MIN_AREA_RATIO:.2f}")
+            
+        elif key == ord('z'):
+            # 减少面积比阈值
+            MIN_AREA_RATIO = max(0.1, MIN_AREA_RATIO - 0.05)
+            print(f"✓ 最小面积比阈值: {MIN_AREA_RATIO:.2f}")
+
+def main():
+    """主函数"""
+    print("=== 海康相机视觉系统 v2.3 (距离映射激光点版) ===")
+    
+    if not SDK_OK:
+        print("❌ SDK未加载，请安装海康威视MVS SDK")
+        return
+    
+    try:
+        # 运行视觉检测系统
+        run_vision_system()
+    except KeyboardInterrupt:
+        print("\n⚠️ 用户中断程序")
+    except Exception as e:
+        print(f"❌ 程序异常: {e}")
+        import traceback
+        traceback.print_exc()
+    finally:
+        # 清理资源
+        print("\n正在清理资源...")
+        stop_capture()
+        disconnect_camera()
+        cleanup_all_debug_windows()  # 先清理调试窗口
+        cv2.destroyAllWindows()      # 再清理所有窗口
+        print("✓ 系统程序结束")
+
+if __name__ == "__main__":
+    main()
+
+
+
+
