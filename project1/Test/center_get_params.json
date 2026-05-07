@@ -1,7 +1,7 @@
 {
-  "threshold": 56,
-  "canny_low": 167,
-  "canny_high": 38,
-  "min_area": 1338,
-  "blur_kernel": 3
+  "threshold": 85,
+  "canny_low": 110,
+  "canny_high": 44,
+  "min_area": 1831,
+  "blur_kernel": 9
 }
