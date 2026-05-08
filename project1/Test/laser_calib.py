@@ -37,15 +37,28 @@ from Algorithm.CenterGet import CenterGet
 # ============================================================
 # 待标定参数（先填入初始猜测值，标定后更新）
 # ============================================================
-REFERENCE_AREA_PIXELS = 8412    # 靶板外框在 1500mm 处的像素面积（待标定）
-REFERENCE_DISTANCE_MM = 1500    # 标定距离，固定 1500mm
 
-MIN_DISTANCE_MM = 500
-MAX_DISTANCE_MM = 1500
+# --- 距离测量模块参数 (Distance Measurement Module Parameters) ---
+REFERENCE_AREA_PIXELS = 7461    # 参考物体在基准距离下的像素面积
+REFERENCE_DISTANCE_MM = 1350    # 参考标定距离 (毫米)
+                                # 说明: 进行面积标定时的物理距离
 
-LASER_X_FIXED        = 322      # 激光点 X 坐标（由安装位置决定，一般不变）
-LASER_Y_MIN_DISTANCE = 240      # 500mm 处激光落点 Y（待标定）
-LASER_Y_MAX_DISTANCE = 250      # 1500mm 处激光落点 Y（待标定）
+# --- 距离映射范围定义 (Distance Mapping Range Definition) ---
+MIN_DISTANCE_MM = 790           # 最近有效测距距离 (毫米)  
+MAX_DISTANCE_MM = 1350          # 最远有效测距距离 (毫米)
+
+# --- 激光点坐标映射参数 (Laser Point Coordinate Mapping Parameters) ---
+LASER_X_FIXED = 330             # 激光点X坐标固定值 (像素)
+                                # 说明: X坐标不随距离变化，对应图像中心偏右
+                                # 设计原因: 激光器安装位置决定的固定偏移
+
+LASER_Y_MIN_DISTANCE = 215      # 最近距离对应的Y坐标 (像素)
+                                # 说明: 当目标距离≤500mm时，激光点Y坐标为240
+                                # 映射逻辑: 距离越近，激光点越靠上
+
+LASER_Y_MAX_DISTANCE = 222      # 最远距离对应的Y坐标 (像素)
+                                # 说明: 当目标距离≥1500mm时，激光点Y坐标为250
+                                # 映射逻辑: 距离越远，激光点越靠下
 
 # 面积平滑窗口大小
 AREA_SMOOTH_N = 10
