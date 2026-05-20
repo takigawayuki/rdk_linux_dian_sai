@@ -37,13 +37,13 @@ SEND_INTERVAL = 0.01        # 100Hz
 # ============================================================
 # 标定参数（从 laser_calib_params.json 自动加载，没有就用默认）
 # ============================================================
-REFERENCE_AREA_PIXELS = 7461    # 靶板在参考距离处的像素面积
-REFERENCE_DISTANCE_MM = 1350    # 参考标定距离
-MIN_DISTANCE_MM       = 790     # 有效测距下限
-MAX_DISTANCE_MM       = 1350    # 有效测距上限
-LASER_X_FIXED         = 331     # 激光点 X 固定值
-LASER_Y_MIN_DISTANCE  = 215     # MIN_DISTANCE_MM 处激光 Y
-LASER_Y_MAX_DISTANCE  = 222     # MAX_DISTANCE_MM 处激光 Y
+REFERENCE_AREA_PIXELS = 7756    # 靶板在参考距离处的像素面积
+REFERENCE_DISTANCE_MM = 1320    # 参考标定距离
+MIN_DISTANCE_MM       = 710     # 有效测距下限
+MAX_DISTANCE_MM       = 1320    # 有效测距上限
+LASER_X_FIXED         = 318     # 激光点 X 固定值
+LASER_Y_MIN_DISTANCE  = 222     # MIN_DISTANCE_MM 处激光 Y
+LASER_Y_MAX_DISTANCE  = 230     # MAX_DISTANCE_MM 处激光 Y
 
 PARAM_FILE = os.path.join(os.path.dirname(__file__), "laser_calib_params.json")
 if os.path.exists(PARAM_FILE):
@@ -208,7 +208,7 @@ def thread_serial():
             print(f"发送: dx={dx:+6.2f}, dy={dy:+6.2f}  "
                   f"laser={laser_pt}  target={center}  D={distance:.0f}mm")
         else:
-            ser.send_deta(0.0, 0.0)
+            ser.send_deta(0.0, 0.0)  # 没识别到东西就会发dx = 0, dy = 0
 
         last_send = now
 

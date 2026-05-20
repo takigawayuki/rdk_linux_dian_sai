@@ -4,10 +4,10 @@ import math
 
 
 # 二值化阈值调整
-threshold_value = 114
+threshold_value = 112
 # 添加Canny边缘检测的阈值参数
-canny_low_threshold = 167
-canny_high_threshold = 127
+canny_low_threshold = 276
+canny_high_threshold = 289
 
 
 def preprocess_image(img):
@@ -81,7 +81,7 @@ def CenterGet(img, return_pts=False, return_area=False):
     for contour in contours:
         # 过滤面积过小的轮廓
         area = cv2.contourArea(contour)
-        if area < 1174:
+        if area < 1150:
             continue
 
         # 轮廓近似

@@ -1,5 +1,9 @@
 {
     "python-envs.defaultEnvManager": "ms-python.python:conda",
     "python-envs.defaultPackageManager": "ms-python.python:conda",
-    "files.encoding": "utf8"
+    "files.encoding": "utf8",
+    "http.proxy":"http://192.168.233.54:10090", // 改成你的实际端口!
+    "http.proxySupport":"override", // 关键! 强制使用这个配置
+    "http.proxyStrictSSL":false, // 跳过 SSL 验证
+    "http.useLocalProxyConfiguration":false// 不使用系统代理
 }
