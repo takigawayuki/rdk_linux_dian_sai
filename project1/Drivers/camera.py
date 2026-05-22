@@ -17,6 +17,8 @@ class Camera:
             # self.cvcap = cv.VideoCapture(0)
 
             self.cvcap = cv.VideoCapture("/dev/v4l/by-id/usb-Sonix_Technology_Co.__Ltd._USB_2.0_Camera-video-index0", cv.CAP_V4L2)
+            # self.cvcap = cv.VideoCapture("/dev/video0", cv.CAP_V4L2)
+            # self.cvcap = cv.VideoCapture(0)
 
             self.cvcap.set(cv.CAP_PROP_FOURCC, cv.VideoWriter_fourcc(*'MJPG'))
             

@@ -4,33 +4,24 @@ import math
 
 
 # 二值化阈值调整
-threshold_value = 95
-# Canny 边缘检测阈值（跑在闭运算后的二值图上，所以梯度只有 0/255，阈值用大值即可）
-canny_low_threshold = 116
-canny_high_threshold = 148
-# 闭运算核大小（修复二值化后矩形边框被激光/反光打断的小缺口）
-close_kernel_size = 1
+threshold_value = 108
+# 添加Canny边缘检测的阈值参数
+canny_low_threshold = 276
+canny_high_threshold = 289
 
 
 def preprocess_image(img):
     """
     :param img: 输入图像
-    :return: 预处理后的边缘图
-    :description: 灰度 → 高斯模糊 → 二值化 → 闭运算修复断边 → Canny 取细边轨迹
-                  闭运算先把激光/反光打断的小缺口补上，再用 Canny 取细边，
-                  4 顶点逼近能稳定拿到矩形 4 个角。
+    :return: 预处理后的图像
+    :description: 对图像进行预处理，包括灰度化、高斯模糊、二值化、Canny边缘检测
     """
-    #EdgeDrawing
+    # 转换为灰度图
     gray = cv2.cvtColor(img, cv2.COLOR_BGR2GRAY)
     blurred = cv2.GaussianBlur(gray, (5, 5), 0)
-
-    _, binary = cv2.threshold(blurred, threshold_value, 255, cv2.THRESH_BINARY)
-    kernel = cv2.getStructuringElement(cv2.MORPH_ELLIPSE,
-                                        (close_kernel_size, close_kernel_size))
-    binary_closed = cv2.morphologyEx(binary, cv2.MORPH_CLOSE, kernel)
-
-    edges = cv2.Canny(binary_closed, canny_low_threshold, canny_high_threshold)
-    return edges
+    # 二值化
+    _, thresh = cv2.threshold(blurred, threshold_value, 255, cv2.THRESH_BINARY)
+    return thresh
 
 def calculate_equidistant_center(pts):
     # 确保pts是4x2的数组
@@ -75,8 +66,10 @@ def CenterGet(img, return_pts=False, return_area=False):
     :description: 获取图像中心坐标,暂时没有考虑透视
     """
     frame = preprocess_image(img)
-    # 直接在 Canny 边缘图上找轮廓
-    contours, _ = cv2.findContours(frame, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
+    # Canny边缘检测
+    edges = cv2.Canny(frame, canny_low_threshold, canny_high_threshold)
+    # 轮廓检测
+    contours, _ = cv2.findContours(edges, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
     # 初始化最佳轮廓变量
     best_contour = None
     best_score = -1
@@ -88,7 +81,7 @@ def CenterGet(img, return_pts=False, return_area=False):
     for contour in contours:
         # 过滤面积过小的轮廓
         area = cv2.contourArea(contour)
-        if area < 1526:
+        if area < 1150:
             continue
 
         # 轮廓近似

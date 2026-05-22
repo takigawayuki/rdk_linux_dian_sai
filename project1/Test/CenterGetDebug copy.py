@@ -11,32 +11,27 @@ from Drivers.camera import Camera
 
 CONFIG_FILE = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'center_get_params.json')
 
-WIN_ORIG     = 'Original'
-WIN_THRESH   = 'Threshold'
-WIN_CLOSED   = 'Threshold + Close'
-WIN_EDGES    = 'Canny on Closed (final)'
-WIN_RESULT   = 'Result (contours)'
-WIN_CTRL     = 'Controls'
+WIN_ORIG   = 'Original'
+WIN_THRESH = 'Threshold'
+WIN_EDGES  = 'Edges'
+WIN_RESULT = 'Result (contours)'
+WIN_CTRL   = 'Controls'
 
 def nothing(_): pass
 
 def load_params():
     """从配置文件加载参数，如果文件不存在则返回默认值"""
     defaults = {
-        'threshold': 108,
+        'threshold': 144,
         'canny_low': 50,
         'canny_high': 150,
-        'min_area': 1150,
-        'blur_kernel': 5,
-        'close_kernel': 7,
+        'min_area': 500,
+        'blur_kernel': 5
     }
     if os.path.exists(CONFIG_FILE):
         try:
             with open(CONFIG_FILE, 'r') as f:
                 params = json.load(f)
-                # 兼容旧配置：缺少的字段用默认值补齐
-                for k, v in defaults.items():
-                    params.setdefault(k, v)
                 print(f'已加载参数: {CONFIG_FILE}')
                 return params
         except:
@@ -44,21 +39,20 @@ def load_params():
             return defaults
     return defaults
 
-def save_params(thresh, canny_low, canny_high, min_area, blur_k, close_k):
+def save_params(thresh, canny_low, canny_high, min_area, blur_k):
     """保存当前参数到配置文件"""
     params = {
         'threshold': thresh,
         'canny_low': canny_low,
         'canny_high': canny_high,
         'min_area': min_area,
-        'blur_kernel': blur_k,
-        'close_kernel': close_k,
+        'blur_kernel': blur_k
     }
     with open(CONFIG_FILE, 'w') as f:
         json.dump(params, f, indent=2)
     print(f'参数已保存到 {CONFIG_FILE}')
 
-def update_centerget_file(thresh, canny_low, canny_high, min_area, close_k):
+def update_centerget_file(thresh, canny_low, canny_high, min_area):
     """直接更新 CenterGet.py 的全局变量"""
     centerget_path = os.path.join(
         os.path.dirname(os.path.dirname(os.path.abspath(__file__))),
@@ -76,8 +70,6 @@ def update_centerget_file(thresh, canny_low, canny_high, min_area, close_k):
                     f.write(f'canny_low_threshold = {canny_low}\n')
                 elif line.startswith('canny_high_threshold ='):
                     f.write(f'canny_high_threshold = {canny_high}\n')
-                elif line.startswith('close_kernel_size ='):
-                    f.write(f'close_kernel_size = {close_k}\n')
                 elif 'if area <' in line:
                     indent = line[:len(line) - len(line.lstrip())]
                     f.write(f'{indent}if area < {min_area}:\n')
@@ -90,37 +82,32 @@ def update_centerget_file(thresh, canny_low, canny_high, min_area, close_k):
 def setup_trackbars():
     params = load_params()
     cv2.namedWindow(WIN_CTRL, cv2.WINDOW_NORMAL)
-    cv2.resizeWindow(WIN_CTRL, 500, 280)
-    cv2.createTrackbar('Threshold',    WIN_CTRL, params['threshold'],    255, nothing)
-    cv2.createTrackbar('Canny Low',    WIN_CTRL, params['canny_low'],    500, nothing)
-    cv2.createTrackbar('Canny High',   WIN_CTRL, params['canny_high'],   500, nothing)
-    cv2.createTrackbar('Min Area',     WIN_CTRL, params['min_area'],    5000, nothing)
-    cv2.createTrackbar('Blur Kernel',  WIN_CTRL, params['blur_kernel'],   21, nothing)
-    cv2.createTrackbar('Close Kernel', WIN_CTRL, params['close_kernel'],  31, nothing)
+    cv2.resizeWindow(WIN_CTRL, 500, 250)
+    cv2.createTrackbar('Threshold',   WIN_CTRL,  params['threshold'], 255, nothing)
+    cv2.createTrackbar('Canny Low',   WIN_CTRL,   params['canny_low'], 500, nothing)
+    cv2.createTrackbar('Canny High',  WIN_CTRL,  params['canny_high'], 500, nothing)
+    cv2.createTrackbar('Min Area',    WIN_CTRL,  params['min_area'], 5000, nothing)
+    cv2.createTrackbar('Blur Kernel', WIN_CTRL,    params['blur_kernel'],  21, nothing)
 
 def get_trackbar_values():
-    thresh     = cv2.getTrackbarPos('Threshold',    WIN_CTRL)
-    canny_low  = cv2.getTrackbarPos('Canny Low',    WIN_CTRL)
-    canny_high = cv2.getTrackbarPos('Canny High',   WIN_CTRL)
-    min_area   = cv2.getTrackbarPos('Min Area',     WIN_CTRL)
-    blur_k     = cv2.getTrackbarPos('Blur Kernel',  WIN_CTRL)
-    close_k    = cv2.getTrackbarPos('Close Kernel', WIN_CTRL)
+    thresh     = cv2.getTrackbarPos('Threshold',   WIN_CTRL)
+    canny_low  = cv2.getTrackbarPos('Canny Low',   WIN_CTRL)
+    canny_high = cv2.getTrackbarPos('Canny High',  WIN_CTRL)
+    min_area   = cv2.getTrackbarPos('Min Area',    WIN_CTRL)
+    blur_k     = cv2.getTrackbarPos('Blur Kernel', WIN_CTRL)
     # 保证 blur kernel 为正奇数
     blur_k = max(1, blur_k)
     if blur_k % 2 == 0:
         blur_k += 1
-    # 保证 close kernel >= 1（cv2.getStructuringElement 不接受 0）
-    close_k = max(1, close_k)
-    return thresh, canny_low, canny_high, min_area, blur_k, close_k
+    return thresh, canny_low, canny_high, min_area, blur_k
 
-def draw_values(img, thresh, canny_low, canny_high, min_area, blur_k, close_k):
+def draw_values(img, thresh, canny_low, canny_high, min_area, blur_k):
     lines = [
         f'Threshold : {thresh}',
         f'Canny Low : {canny_low}',
         f'Canny High: {canny_high}',
         f'Min Area  : {min_area}',
         f'Blur Kern : {blur_k}',
-        f'Close Kern: {close_k}',
     ]
     y = 20
     for line in lines:
@@ -149,17 +136,11 @@ def calculate_equidistant_center(pts):
         y = np.mean(pts[:, 1])
     return (int(round(x)), int(round(y)))
 
-def process(frame, thresh_val, canny_low, canny_high, min_area, blur_k, close_k):
+def process(frame, thresh_val, canny_low, canny_high, min_area, blur_k):
     gray    = cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY)
     blurred = cv2.GaussianBlur(gray, (blur_k, blur_k), 0)
-
-    # 二值化 + 闭运算（连接断边）
     _, thresh_img = cv2.threshold(blurred, thresh_val, 255, cv2.THRESH_BINARY)
-    kernel = cv2.getStructuringElement(cv2.MORPH_ELLIPSE, (close_k, close_k))
-    closed_img = cv2.morphologyEx(thresh_img, cv2.MORPH_CLOSE, kernel)
-
-    # Canny 跑在闭运算后的二值图上 → 这是 CenterGet 实际找轮廓用的图
-    edges = cv2.Canny(closed_img, canny_low, canny_high)
+    edges   = cv2.Canny(thresh_img, canny_low, canny_high)
 
     result  = frame.copy()
     contours, _ = cv2.findContours(edges, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
@@ -168,7 +149,7 @@ def process(frame, thresh_val, canny_low, canny_high, min_area, blur_k, close_k)
     best_score   = -1
     best_center  = None
     best_approx  = None
-    h, w = edges.shape[:2]
+    h, w = thresh_img.shape[:2]
 
     for contour in contours:
         area = cv2.contourArea(contour)
@@ -246,14 +227,13 @@ def process(frame, thresh_val, canny_low, canny_high, min_area, blur_k, close_k)
     cv2.putText(result, status, (10, h - 10),
                 cv2.FONT_HERSHEY_SIMPLEX, 0.5, (255, 255, 255), 1)
 
-    # 把阈值数字叠加到几张中间图上（方便截图对比）
+    # 把阈值数字叠加到二值图和边缘图上（方便截图对比）
     thresh_bgr = cv2.cvtColor(thresh_img, cv2.COLOR_GRAY2BGR)
-    closed_bgr = cv2.cvtColor(closed_img, cv2.COLOR_GRAY2BGR)
     edges_bgr  = cv2.cvtColor(edges,      cv2.COLOR_GRAY2BGR)
-    for img in (thresh_bgr, closed_bgr, edges_bgr):
-        draw_values(img, thresh_val, canny_low, canny_high, min_area, blur_k, close_k)
+    draw_values(thresh_bgr, thresh_val, canny_low, canny_high, min_area, blur_k)
+    draw_values(edges_bgr,  thresh_val, canny_low, canny_high, min_area, blur_k)
 
-    return thresh_bgr, closed_bgr, edges_bgr, result
+    return thresh_bgr, edges_bgr, result
 
 
 def main():
@@ -261,16 +241,15 @@ def main():
     cap.open()
 
     setup_trackbars()
-    cv2.namedWindow(WIN_ORIG,    cv2.WINDOW_NORMAL)
-    cv2.namedWindow(WIN_THRESH,  cv2.WINDOW_NORMAL)
-    cv2.namedWindow(WIN_CLOSED,  cv2.WINDOW_NORMAL)
-    cv2.namedWindow(WIN_EDGES,   cv2.WINDOW_NORMAL)
-    cv2.namedWindow(WIN_RESULT,  cv2.WINDOW_NORMAL)
+    cv2.namedWindow(WIN_ORIG,   cv2.WINDOW_NORMAL)
+    cv2.namedWindow(WIN_THRESH, cv2.WINDOW_NORMAL)
+    cv2.namedWindow(WIN_EDGES,  cv2.WINDOW_NORMAL)
+    cv2.namedWindow(WIN_RESULT, cv2.WINDOW_NORMAL)
 
     print('按 Q 或 Ctrl+C 退出，自动保存参数并写入 CenterGet.py')
     print('颜色说明: 灰=通过面积  蓝=角度不合格  黄=候选  绿=最佳')
 
-    last_params = (0, 0, 0, 0, 0, 0)
+    last_params = (0, 0, 0, 0, 0)
     try:
         while True:
             frame = cap.capture()
@@ -278,25 +257,23 @@ def main():
                 print('无法获取图像帧')
                 break
 
-            t, cl, ch, ma, bk, ck = get_trackbar_values()
-            last_params = (t, cl, ch, ma, bk, ck)
-            thresh_img, closed_img, edges_img, result_img = \
-                process(frame, t, cl, ch, ma, bk, ck)
+            t, cl, ch, ma, bk = get_trackbar_values()
+            last_params = (t, cl, ch, ma, bk)
+            thresh_img, edges_img, result_img = process(frame, t, cl, ch, ma, bk)
 
-            cv2.imshow(WIN_ORIG,    frame)
-            cv2.imshow(WIN_THRESH,  thresh_img)
-            cv2.imshow(WIN_CLOSED,  closed_img)
-            cv2.imshow(WIN_EDGES,   edges_img)
-            cv2.imshow(WIN_RESULT,  result_img)
+            cv2.imshow(WIN_ORIG,   frame)
+            cv2.imshow(WIN_THRESH, thresh_img)
+            cv2.imshow(WIN_EDGES,  edges_img)
+            cv2.imshow(WIN_RESULT, result_img)
 
             if cv2.waitKey(1) & 0xFF == ord('q'):
                 break
     except KeyboardInterrupt:
         pass
     finally:
-        t, cl, ch, ma, bk, ck = last_params
-        save_params(t, cl, ch, ma, bk, ck)
-        update_centerget_file(t, cl, ch, ma, ck)
+        t, cl, ch, ma, bk = last_params
+        save_params(t, cl, ch, ma, bk)
+        update_centerget_file(t, cl, ch, ma)
 
     cap.close()
     cv2.destroyAllWindows()
